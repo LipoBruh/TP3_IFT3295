@@ -1,6 +1,7 @@
 # TP3_IFT3295
 
 Emanuel Rollin - 20106951
+Github: https://github.com/LipoBruh/TP3_IFT3295
 
 ## Dépendances
 
