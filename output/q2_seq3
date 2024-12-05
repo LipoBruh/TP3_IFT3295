@@ -1,0 +1,10 @@
+_____RESULTS_____
+  Seed used      : 11100000111
+  Pattern match  : CGCGGAGTAGAGCAGTTTG
+  Sequence match : CGCAAAAAAGAATTGTTTT
+  ID             : >G|gcc|Chlorokybus_atmophyticus
+  Fusion score   : 23
+  Bit score      : 36
+  E value        : 3.380959969945252e-05
+  Q2.2 AA      (deduced) : KTILFC...
+  Q2.2 Codon   (deduced) : AAAACAAUUCUUUUUUGCG

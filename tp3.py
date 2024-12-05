@@ -1,6 +1,7 @@
 from boyer_moore import Alignments
 from parser import Database , Read
 import numpy as np
+import os
 
 class Pattern:
     def __init__(self, pattern_string, seed_size):
@@ -46,7 +47,7 @@ class Pattern:
 
 class PLAST:
 
-    def __init__(self,pattern="ACATCCTTAGCTCAGTAGGATAGAGCAACAGCCTTCTAAGCTGGTGGTCACAGGTTCAAATCCTGTAGGATGTA", seed="11100001111",match_penality=5,mismatch_penality=-5, min_E = 4, ss = 1e-3, path = "./tRNAs.fasta" ):
+    def __init__(self,pattern="ACATCCTTAGCTCAGTAGGATAGAGCAACAGCCTTCTAAGCTGGTGGTCACAGGTTCAAATCCTGTAGGATGTA", seed="11100001111",match_penality=5,mismatch_penality=-5, min_E = 1e3, ss = 4, path = "./tRNAs.fasta" ):
         self.pattern = Pattern(pattern, len(seed))
         self.seed = seed
         self.db = Database(path)
@@ -58,7 +59,7 @@ class PLAST:
         self.ss = ss
 
 
-    def run(self):
+    def run(self,path="new_file.txt"):
             print("_____LOADING_____")
             #
             self.find_all_HSP()
@@ -68,9 +69,19 @@ class PLAST:
             if len(sorted_list)>0:
                 #print(sorted_list)
                 fusion = sorted_list[0][1]
-                fusion.get_metrics()
+                text = fusion.get_metrics()
+                #
+                output_directory = "output"
+                file_path = os.path.join(output_directory, path)
+                #
+                os.makedirs(output_directory, exist_ok=True)
+                with open(file_path, "w") as file:
+                    file.write(text)
+                #
             else:
                 print("No alignment, try with a more flexible seed")
+
+
 
 
     ##Boyer Moore Exact match algorithm
@@ -112,16 +123,13 @@ class PLAST:
         if max is None : 
             print("No Alignment For that Kmer")
             return None
-        text = max.read.sequence
-        index = max.index
         return max
-        print("Text match : " + text[index:index+11])
 
-    def extend_max_n(self,n,match_penalty=5,mismatch_penalty=-4,E=4):
+    def extend_max_n(self,n,match_penalty=5,mismatch_penalty=-4,ss=4):
         align = self.show_max(n)
-        return self.extend(align,match_penalty,mismatch_penalty,E)
+        return self.extend(align,match_penalty,mismatch_penalty,ss)
 
-    def extend(self,align,match_penalty=5,mismatch_penalty=-4,E=4):
+    def extend(self,align,match_penalty=5,mismatch_penalty=-4,ss=4):
         #
         if align is None: 
             print("No extension possible")
@@ -144,7 +152,7 @@ class PLAST:
         #print("Text of size : "+str(len(text)) + " with starting slice ("+str(index_text_left)+","+str(index_text_right)+")")
         #print("Pattern of size : "+str(len(full_pattern)) + " with starting slice ("+str(index_pattern_left)+","+str(index_pattern_right)+")")
         #
-        while((truth_right or truth_left) and score>=E):
+        while((truth_right or truth_left) and score>=ss):
             #chars
             char_text_left = text[index_text_left-1]
             char_pattern_left = text[index_pattern_left-1]
@@ -163,14 +171,14 @@ class PLAST:
                 index_pattern_right+=1
                 index_text_right+=1
             elif (truth_left):
-                if (score+mismatch_penalty)<E: 
+                if (score+mismatch_penalty)<ss: 
                     flag_left = False
                 else:
                     score+=mismatch_penalty
                     index_pattern_left-=1
                     index_text_left-=1
             elif(truth_right):
-                if (score+mismatch_penalty)<E: 
+                if (score+mismatch_penalty)<ss: 
                     flag_right = False
                 else:
                     score+=mismatch_penalty
@@ -245,7 +253,10 @@ class PLAST:
         #
         sorted_items = sorted(fusion_dic.items(), key=lambda pair: pair[1].e_value(), reverse=False)
         #
-        return sorted_items # dict of the format {read : Fusion_HSP}
+        condition = lambda item: item[1].cut_off(self.min_E)
+        filtered_list = list(filter(condition,sorted_items))
+        #
+        return filtered_list # dict of the format {read : Fusion_HSP}
 
 
     #will find the best alignment for a kmer in a specific read
@@ -255,7 +266,7 @@ class PLAST:
         extended_list = []
         for kmer in kmer_set:
             alignment = self.kmer_max_score_read(kmer,read)
-            extended_hsp = self.extend(alignment,self.match_penality,self.mismatch_penality,self.min_E)
+            extended_hsp = self.extend(alignment,self.match_penality,self.mismatch_penality,self.ss)
             extended_list.append(extended_hsp)
         if len(extended_list)==0:
             print("No extension possible")
@@ -300,6 +311,99 @@ class Fusion_HSP:
         self.index_pattern_right = initial_HSP.index_pattern_right
         #
         self.fused_HSP = [initial_HSP]
+
+    def codon_to_amino_acid(self,codon):
+        codon_map = {
+            # Phe
+            "UUU": {"acronym": "Phe", "name": "Phenylalanine", "image": "./images/L-Phenylalanine.png","letter":"F"},
+            "UUC": {"acronym": "Phe", "name": "Phenylalanine", "image": "./images/L-Phenylalanine.png","letter":"F"},
+            # Leu
+            "CUU": {"acronym": "Leu", "name": "Leucine", "image": "./images/L-Leucine.png","letter":"L"},
+            "CUC": {"acronym": "Leu", "name": "Leucine", "image": "./images/L-Leucine.png","letter":"L"},
+            "CUA": {"acronym": "Leu", "name": "Leucine", "image": "./images/L-Leucine.png","letter":"L"},
+            "CUG": {"acronym": "Leu", "name": "Leucine", "image": "./images/L-Leucine.png","letter":"L"},
+            "UUA": {"acronym": "Leu", "name": "Leucine", "image": "./images/L-Leucine.png","letter":"L"},
+            "UUG": {"acronym": "Leu", "name": "Leucine", "image": "./images/L-Leucine.png","letter":"L"},
+            # Ser
+            "AGU": {"acronym": "Ser", "name": "Serine", "image": "./images/L-Serine.png","letter":"S"},
+            "AGC": {"acronym": "Ser", "name": "Serine", "image": "./images/L-Serine.png","letter":"S"},
+            "UCU": {"acronym": "Ser", "name": "Serine", "image": "./images/L-Serine.png","letter":"S"},
+            "UCC": {"acronym": "Ser", "name": "Serine", "image": "./images/L-Serine.png","letter":"S"},
+            "UCA": {"acronym": "Ser", "name": "Serine", "image": "./images/L-Serine.png","letter":"S"},
+            "UCG": {"acronym": "Ser", "name": "Serine", "image": "./images/L-Serine.png","letter":"S"},
+            # Tyr
+            "UAU": {"acronym": "Tyr", "name": "Tyrosine", "image": "./images/L-Tyrosine.png","letter":"Y"},
+            "UAC": {"acronym": "Tyr", "name": "Tyrosine", "image": "./images/L-Tyrosine.png","letter":"Y"},
+            # STOP
+            "UGA": {"acronym": "STOP", "name": "STOP", "image": "./images/STOP.png","letter":"*"},
+            "UAA": {"acronym": "STOP", "name": "STOP", "image": "./images/STOP.png","letter":"*"},
+            "UAG": {"acronym": "STOP", "name": "STOP", "image": "./images/STOP.png","letter":"*"},
+            # Cys
+            "UGU": {"acronym": "Cys", "name": "Cysteine", "image": "./images/L-Cysteine.png","letter":"C"},
+            "UGC": {"acronym": "Cys", "name": "Cysteine", "image": "./images/L-Cysteine.png","letter":"C"},
+            # Trp
+            "UGG": {"acronym": "Trp", "name": "Tryptophan", "image": "./images/L-Tryptophan.png","letter":"W"},
+            # Pro
+            "CCU": {"acronym": "Pro", "name": "Proline", "image": "./images/L-Proline.png","letter":"P"},
+            "CCC": {"acronym": "Pro", "name": "Proline", "image": "./images/L-Proline.png","letter":"P"},
+            "CCA": {"acronym": "Pro", "name": "Proline", "image": "./images/L-Proline.png","letter":"P"},
+            "CCG": {"acronym": "Pro", "name": "Proline", "image": "./images/L-Proline.png","letter":"P"},
+            # His
+            "CAU": {"acronym": "His", "name": "Histidine", "image": "./images/L-Histidine.png","letter":"H"},
+            "CAC": {"acronym": "His", "name": "Histidine", "image": "./images/L-Histidine.png","letter":"H"},
+            # Gln
+            "CAA": {"acronym": "Gln", "name": "Glutamine", "image": "./images/L-Glutamine.png","letter":"Q"},
+            "CAG": {"acronym": "Gln", "name": "Glutamine", "image": "./images/L-Glutamine.png","letter":"Q"},
+            # Arg
+            "CGU": {"acronym": "Arg", "name": "Arginine", "image": "./images/L-Arginine.png","letter":"R"},
+            "CGC": {"acronym": "Arg", "name": "Arginine", "image": "./images/L-Arginine.png","letter":"R"},
+            "CGA": {"acronym": "Arg", "name": "Arginine", "image": "./images/L-Arginine.png","letter":"R"},
+            "CGG": {"acronym": "Arg", "name": "Arginine", "image": "./images/L-Arginine.png","letter":"R"},
+            "AGA": {"acronym": "Arg", "name": "Arginine", "image": "./images/L-Arginine.png","letter":"R"},
+            "AGG": {"acronym": "Arg", "name": "Arginine", "image": "./images/L-Arginine.png","letter":"R"},
+            # Ile
+            "AUU": {"acronym": "Ile", "name": "Isoleucine", "image": "./images/L-Isoleucine.png","letter":"I"},
+            "AUC": {"acronym": "Ile", "name": "Isoleucine", "image": "./images/L-Isoleucine.png","letter":"I"},
+            "AUA": {"acronym": "Ile", "name": "Isoleucine", "image": "./images/L-Isoleucine.png","letter":"I"},
+            # Met
+            "AUG": {"acronym": "Met", "name": "Methionine", "image": "./images/L-Methionine.png","letter":"M"},
+            # Thr
+            "ACU": {"acronym": "Thr", "name": "Threonine", "image": "./images/L-Threonine.png","letter":"T"},
+            "ACC": {"acronym": "Thr", "name": "Threonine", "image": "./images/L-Threonine.png","letter":"T"},
+            "ACA": {"acronym": "Thr", "name": "Threonine", "image": "./images/L-Threonine.png","letter":"T"},
+            "ACG": {"acronym": "Thr", "name": "Threonine", "image": "./images/L-Threonine.png","letter":"T"},
+            # Asn
+            "AAU": {"acronym": "Asn", "name": "Asparagine", "image": "./images/L-Asparagine.png","letter":"N"},
+            "AAC": {"acronym": "Asn", "name": "Asparagine", "image": "./images/L-Asparagine.png","letter":"N"},
+            # Lys
+            "AAA": {"acronym": "Lys", "name": "Lysine", "image": "./images/L-Lysine.png","letter":"K"},
+            "AAG": {"acronym": "Lys", "name": "Lysine", "image": "./images/L-Lysine.png","letter":"K"},
+            # Val
+            "GUU": {"acronym": "Val", "name": "Valine", "image": "./images/L-Valine.png","letter":"V"},
+            "GUC": {"acronym": "Val", "name": "Valine", "image": "./images/L-Valine.png","letter":"V"},
+            "GUA": {"acronym": "Val", "name": "Valine", "image": "./images/L-Valine.png","letter":"V"},
+            "GUG": {"acronym": "Val", "name": "Valine", "image": "./images/L-Valine.png","letter":"V"},
+            # Ala
+            "GCU": {"acronym": "Ala", "name": "Alanine", "image": "./images/L-Alanine.png","letter":"A"},
+            "GCC": {"acronym": "Ala", "name": "Alanine", "image": "./images/L-Alanine.png","letter":"A"},
+            "GCA": {"acronym": "Ala", "name": "Alanine", "image": "./images/L-Alanine.png","letter":"A"},
+            "GCG": {"acronym": "Ala", "name": "Alanine", "image": "./images/L-Alanine.png","letter":"A"},
+            # Asp
+            "GAU": {"acronym": "Asp", "name": "Aspartate", "image": "./images/L-Aspartate.png","letter":"D"},
+            "GAC": {"acronym": "Asp", "name": "Aspartate", "image": "./images/L-Aspartate.png","letter":"D"},
+            # Glu
+            "GAA": {"acronym": "Glu", "name": "Glutamate", "image": "./images/L-Glutamate.png","letter":"E"},
+            "GAG": {"acronym": "Glu", "name": "Glutamate", "image": "./images/L-Glutamate.png","letter":"E"},
+            # Gly
+            "GGU": { "acronym": "Gly", "name": "Glycine", "image": "./images/L-Glycine.png","letter":"G" },
+            "GGC": { "acronym": "Gly", "name": "Glycine", "image": "./images/L-Glycine.png","letter":"G" },
+            "GGA": { "acronym": "Gly", "name": "Glycine", "image": "./images/L-Glycine.png","letter":"G" },
+            "GGG": { "acronym": "Gly", "name": "Glycine", "image": "./images/L-Glycine.png","letter":"G" },
+        }
+        if codon in codon_map:
+            return codon_map[codon]["letter"]
+        return None
+
 
     def fuse_HSP(self,extended):
         #same string?
@@ -353,26 +457,65 @@ class Fusion_HSP:
     def e_value(self):
         e = self.db.size*len(self.pattern.pattern_string)*(2**(-1*self.bitscore()))
         return e
+    
+    def cut_off(self,min_E):
+        return self.e_value()<min_E
         
+
+    def to_reverse(self):
+        dna_to_rna = {
+        "A": "U",  # Adenine -> Uracil
+        "T": "A",  # Thymine -> Adenine
+        "C": "G",  # Cytosine -> Guanine
+        "G": "C"   # Guanine -> Cytosine
+    }
+        return "".join([dna_to_rna[base] for base in reversed(self.get_sequence())])
+    
+
+    def to_AA(self):
+        rna = self.to_reverse()
+        print(rna)
+        aa_seq = ""
+        for i in range (0,len(rna),3):
+            if i+3>len(rna):
+                return aa_seq+"..."
+            codon = rna[i:i+3]
+            print(codon)
+            aa = self.codon_to_amino_acid(codon)
+            aa_seq+=aa
+        return aa_seq
+
+
+
+
     def get_metrics(self):
-        print("_____RESULTS_____")
-        print("  Seed used      : " + self.initial_HSP.alignment.seed)
-        print("  Pattern match  : "+ self.get_pattern())
-        print("  Sequence match : "+ self.get_sequence())
-        print("  ID             : "+self.read.header)
-        print("  Fusion score   : "+str(self.get_score()))
-        print("  Bit score      : "+str(self.bitscore()))
-        print("  E value        : "+str(self.e_value()))
+        text = (
+            "_____RESULTS_____\n"
+            f"  Seed used      : {self.initial_HSP.alignment.seed}\n"
+            f"  Pattern match  : {self.get_pattern()}\n"
+            f"  Sequence match : {self.get_sequence()}\n"
+            f"  ID             : {self.read.header}\n"
+            f"  Fusion score   : {self.get_score()}\n"
+            f"  Bit score      : {self.bitscore()}\n"
+            f"  E value        : {self.e_value()}\n"
+            f"  Q2.2 AA      (deduced) : {self.to_AA()}\n"
+            f"  Q2.2 Codon   (deduced) : {self.to_reverse()}\n"
+        )
 
-"""
-CGAATCCTTCTAGA
-AGGTGAGGGTTC
-AGGTCTATGGCTTAAGGGTAGAGTGTTGGTTTCCAAAACCAC AGGTGAGGGTTCGAATCCTTCTAGA CCTG
+        print(text)
+        return text
 
-"""
-
-"""
-pattern CGTAGTCGGCTAACCAGCATAACGCTTGTAAACGTAAGAGCCC
-
-AGGTGAGGGTTCGAATCCTTCTAGA
-"""
+#Lazy way to do it
+# format :     plast =(self,pattern="...", seed="...",match_penality=5,mismatch_penality=-4, min_E = 0.001, ss = 4, path = "./tRNAs.fasta" )
+#seq1
+plast = PLAST("AGCGGGGTAGAGGAATTGGTTTACTCATCAGGCTCATGACCTGAAGACTGCAGGTTCGAATCCTGTCCCCGCCT", "11111111111",5,-4, 0.001, 4, 'tRNAs.fasta')
+plast.run("q2_seq1")
+#seq2
+plast = PLAST("ACATCCTTAGCTCAGTAGGATAGAGCAACAGCCTTCTAAGCTGGTGGTCACAGGTTCAAATCCTGTAGGATGTA", "11100000111",5,-4, 0.001, 4, 'tRNAs.fasta')
+plast.run("q2_seq2")
+#seq3
+plast = PLAST("CGCGGAGTAGAGCAGTTTGGTAGCTCGCAAGGCTCATAACCTTGAGGTCACGGGTTCAAATCCTGTCATCCCTA", "11100000111",5,-4, 100, 4, 'tRNAs.fasta')
+plast.run("q2_seq3")
+#seq4
+plast = PLAST("GCATTCTTAGCTCAGCTGGATAGAGCAACAACCTTCTAAGTTGAAGGTCACAGGTTCAAATCCTGTAGGATGCT", "11111111111",5,-4, 0.001, 4, 'tRNAs.fasta')
+plast.run("q2_seq4")
